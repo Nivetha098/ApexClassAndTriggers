@@ -1,0 +1,318 @@
+                                          
+                                                            Assignment 
+
+                                             1. When Amount field on Opportunity object  is greater than $50k, mark is_goldenAccount to TRUE.
+
+APEX TRIGGER:
+
+trigger OpportunityUpdateAccount on Opportunity( after insert, after update ) {   
+    
+    if(Trigger.isInsert || Trigger.isUpdate && Trigger.isAfter){
+        OpportunityUpdateClass.updateAmount(Trigger.new);
+    }
+}
+
+
+APEX CLASS:
+
+public class OpportunityUpdateClass {
+    
+    public static void updateAmount(List<Opportunity> oppList)
+    {
+        List<Account>  accounts = new List<Account>();     
+        Set<Id> setAccountsId = new Set<Id>();
+        Map<Id,Opportunity> mapOpp =new Map<id, Opportunity>();
+        
+        for(Opportunity obj:oppList){
+            setAccountsId.add(obj.AccountId);
+        }
+        for(Opportunity obj: oppList){
+            mapOpp.put(obj.AccountId,obj);
+        }
+        for(Account obj :[select Id, isAccount_golden__c from Account where Id IN :setAccountsId]){
+            if(mapOpp.get(obj.Id).Amount>50000){
+                obj.isAccount_golden__c=TRUE;
+                accounts.add(obj);
+            }
+            else
+            {
+                obj.isAccount_golden__c=FALSE;
+                accounts.add(obj); 
+            }
+        }
+        if(accounts.size()>0)
+        {
+            upsert accounts;
+        }
+    }
+}
+ 
+
+
+
+TEST CLASS:
+
+@isTest
+private class OpportunityUpdateClass_Test{
+    public static testmethod void oppTest(){
+        Account acct=new Account();
+        acct.name='a';
+        acct.industry='Electronics';   
+        insert acct;
+        Opportunity op = new Opportunity();
+        op.Name = acct.Name;
+        op.AccountId = acct.Id;
+        op.Amount = 100;
+        op.StageName = 'Proposal';
+        op.CloseDate = System.today() + 30;
+        insert op;
+        
+    }
+}
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+                             2.When an Account is updated and the Website is filled in, update the Profile field on all related Contacts to: Profile = Website + ‘/’ + First Letter of 
+First Name + Last Name
+
+
+APEX TRIGGER:
+
+trigger trigger_class2 on Account (After Update)
+{   
+    if(Trigger.isAfter && Trigger.isUpdate)
+    {
+        TriggerClass2.trigger_class2Method(trigger.new);
+    }
+}
+
+
+
+
+
+
+APEX CLASS:
+
+public class TriggerClass2 {
+    public static void trigger_class2Method(List<Account> accList)
+    {
+        new list<contact>();
+         Set<Id> AccountId = new Set<Id>();
+        
+        for(Account ac : accList)
+        {
+            if(ac.website != null)
+            {
+                AccountId.add(ac.id);
+            }
+        }
+        
+        if(AccountId.size()>0)
+        {
+            List<Contact> ContactList = [select Id,Firstname,Lastname,Profile__c,Accountid,Account.website from contact where Accountid in :AccountId];
+            for(Contact con : ContactList)
+            {
+                if(con.FirstName != Null)
+                {
+                    con.Profile__c = con.account.website + '/' + con.FirstName.substring(0, 1) + con.lastname;
+                }
+            }
+            update ContactList;
+            System.debug('updated');
+        }
+    }
+
+}
+
+
+
+
+
+
+
+TEST CLASS:
+
+@isTest
+
+public class TriggerClass2Test {
+    
+       public  static  testmethod void testClass(){
+        Account account_Obj = new Account(Name = 'Name990', Website = 'http://test28.com', isAccount_golden__c = false, Only_Default_Contact__c = false);
+        Insert account_Obj; 
+        Contact contact_Obj = new Contact(LastName = 'LastName568', FirstName = 'First995', Profile__c = 'Profi202');
+        Insert contact_Obj; 
+        
+        List<Account> account_Obj1  =  [SELECT Name,Website from Account];
+        System.assertEquals(true,account_Obj1.size()>0);
+        List<Contact> contact_Obj1  =  [SELECT LastName,FirstName,Profile__c from Contact];
+        System.assertEquals(true,contact_Obj1.size()>0);
+        TriggerClass2 obj01 = new TriggerClass2();
+    }
+}
+
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+                              3.When a new Account is created, create a new Contact that has the following data points:
+First Name = “Info”
+Last Name = “Default”
+Email = “info@websitedomain.tld”
+Only_Default_Contact = TRUE
+When the Account has more than 1 Contact, update Only_Default_Contact to FALSE.
+
+
+
+APEX TRIGGER:
+
+trigger tcontact on Account (after insert, after update) {
+    if(Trigger.isAfter && Trigger.isInsert){
+        ContactNameUpdate.createName(trigger.old, trigger.new);
+    }
+    
+    if(Trigger.isAfter && Trigger.isUpdate){
+        ContactNameUpdate.createName(trigger.old,trigger.new);
+    }
+}
+
+trigger ttcontaat on Contact (after insert) {
+    if(trigger.isafter && trigger.isinsert) {
+		ContactNameUpdate.updateCheckboxOnAccount(Trigger.new);
+    }
+}
+
+
+
+
+
+
+APEX CLASS:
+
+public class ContactNameUpdate {
+    public static void createName(List<Account> listOld, List<Account>listNew){
+        try{
+            List<Account>accConList = new List<Account>();
+            Set<Id> accSet=new Set<Id>();
+            if(listOld == null){
+                if(listNew.size()>0) {
+                    List<Contact> contact = new List<Contact>();
+                    List<Account>AccList = new List<Account>();
+                    for (Account ac : listNew) {
+                        Account acc1 = new Account();
+                        acc1.Id = ac.Id;
+                        acc1.Name = ac.Name;
+                        acc1.Only_Default_Contact__c = TRUE;
+                        AccList.add(acc1);
+                        accSet.add(ac.Id);
+                        Contact con = new Contact();
+                        con.AccountId = ac.Id;
+                        con.FirstName = 'Info';
+                        con.LastName = 'Default';
+                        con.Email = 'info@websitedomain.tld';
+                        contact.add(con);
+                    }
+                    if (contact.size() > 0) {
+                        insert contact;
+                    }
+                    if (AccList.size() > 0) {
+                        update AccList;
+                    }
+                    accConList = [SELECT Id,(SELECT Id FROM Contacts) FROM Account WHERE Id IN : accSet LIMIT 1000];
+                    for(Account accIn : accConList){
+                        if(accIn.Contacts.size() > 1){
+                            
+                            accIn.Only_Default_Contact__c = False;
+                        }
+                    }
+                    if (accConList.size() > 0) {
+                        update accConList;
+                    }
+                }
+            }
+            else {
+                if(listNew.size()>0) {
+                    List<Account>AccList = new List<Account>();
+                    for (Account acc : listNew) {
+                        accSet.add(acc.Id);
+                    }
+                    accConList = [SELECT Id,Name,Only_Default_Contact__c, (SELECT Id FROM Contacts) FROM Account WHERE Id IN : accSet LIMIT 1000];
+                    
+                    for (Account accIn : accConList) {
+                        System.debug('accIn.Contacts.size()>>>'+accIn.Contacts.size());
+                        if (accIn.Contacts.size() > 1) {
+                            
+                            Account accInst = new Account();
+                            accInst.Id = accIn.Id;
+                            accInst.Name = accIn.Name;
+                            accInst.Only_Default_Contact__c = False;
+                            if(accIn.Only_Default_Contact__c == False){
+                                
+                            }else{
+                                AccList.add(accInst);
+                            }
+                        }
+                        if (accIn.Contacts.size() ==1) {
+                            Account accInst = new Account();
+                            accInst.Id = accIn.Id;
+                            accInst.Name = accIn.Name;
+                            accInst.Only_Default_Contact__c = TRUE;
+                            if(accIn.Only_Default_Contact__c == TRUE){
+                            }else{
+                                AccList.add(accInst);
+                            }
+                        }
+                    }
+                    if (AccList.size() > 0) {
+                        update AccList;
+                    }
+                }
+            }
+        }catch (Exception e){
+            system.debug('Exception ae: '+e.getMessage()+' '+e.getLineNumber());
+        }
+    }
+ public static void updateCheckboxOnAccount(List<Contact> contactList){
+		Set<Id> accountIds = new Set<Id>();
+		for(Contact con : contactList) {
+			 accountIds.add(con.AccountId);
+		}
+		
+		List<Account> updatedAccounts = new List<Account>();
+		for(AggregateResult ar : [select count(id) , AccountId from Contact where AccountId IN :accountIds group by AccountId having count(id)  >1 ]){
+			updatedAccounts.add(new Account(Id = (Id)ar.get('AccountId'), Only_Default_Contact__c=false));    
+		}
+		
+		if(!updatedAccounts.isEmpty())
+			update updatedAccounts;
+	}
+
+}
+
+
+
+
+TEST CLASS:
+
+@isTest
+private class ContactNameUpdate_Test{
+    public static testMethod void ContactNameUpdate(){
+        Account account_Obj = new Account(Name = 'Name770', Website = 'http://test28.com', isAccount_golden__c = false, Only_Default_Contact__c = false);
+        Insert account_Obj; 
+        Contact contact_Obj = new Contact(LastName = 'LastName388', FirstName = 'First744', Profile__c = 'Profi880');
+        Insert contact_Obj; 
+        List<Account> account_Obj1  =  [SELECT Name,isAccount_golden__c,Only_Default_Contact__c,Website from Account];
+        System.assertEquals(true,account_Obj1.size()>0);
+        List<Contact> contact_Obj1  =  [SELECT LastName,FirstName,Id,Profile__c from Contact];
+        System.assertEquals(true,contact_Obj1.size()>0);
+        
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
