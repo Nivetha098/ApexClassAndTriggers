@@ -161,7 +161,7 @@ When the Account has more than 1 Contact, update Only_Default_Contact to FALSE.
 
 
 
-APEX TRIGGER:
+APEX TRIGGERS:
 
 trigger tcontact on Account (after insert, after update) {
     if(Trigger.isAfter && Trigger.isInsert){
@@ -173,6 +173,11 @@ trigger tcontact on Account (after insert, after update) {
     }
 }
 
+trigger ttcontaat on Contact (after insert) {
+    if(trigger.isafter && trigger.isinsert) {
+		ContactNameUpdate.updateCheckboxOnAccount(Trigger.new);
+    }
+}
 
 
 
@@ -262,8 +267,22 @@ public class ContactNameUpdate {
             system.debug('Exception ae: '+e.getMessage()+' '+e.getLineNumber());
         }
     }
-}
+ public static void updateCheckboxOnAccount(List<Contact> contactList){
+		Set<Id> accountIds = new Set<Id>();
+		for(Contact con : contactList) {
+			 accountIds.add(con.AccountId);
+		}
+		
+		List<Account> updatedAccounts = new List<Account>();
+		for(AggregateResult ar : [select count(id) , AccountId from Contact where AccountId IN :accountIds group by AccountId having count(id)  >1 ]){
+			updatedAccounts.add(new Account(Id = (Id)ar.get('AccountId'), Only_Default_Contact__c=false));    
+		}
+		
+		if(!updatedAccounts.isEmpty())
+			update updatedAccounts;
+	}
 
+}
 
 
 
